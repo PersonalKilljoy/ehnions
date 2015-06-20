@@ -10,7 +10,7 @@ import MySQLdb  # apt-get install python-MySQLdb
 import socket
 import socks  # socksipy
 from BeautifulSoup import BeautifulSoup
-from util import DataBs
+from util import db_wrapper as dbw
 
 bufsize = 0
 PAGE_HASH = 'acbc159c7062332360bcd792ff9c6e294cb32ec3a5b87577e25da36117518b172f2c77c59c1a9bb18f8d905d1f67eeab9cca217990f23828444c2c9aff865e0b'
@@ -79,7 +79,7 @@ def test_hash(s):
 def load_onions(inputfile):
     regex = re.compile("([a-z2-7]){16}")
     try:
-        with DataBs as db:
+        with dbw.DataBs() as db:
             try:
                 print('Opening File %s ...' % inputfile)
                 onion_addrs = ''
@@ -98,14 +98,23 @@ def load_onions(inputfile):
 
 def onion_scan():
     try:
-        with DataBs as db:
+        with dbw.DataBs() as db:
             try:
                 print('Querying...')
-                for onion_addr in db.select_scannable():
-                    db.add_onion_scan(parseOnion(onion_addr[0]))
+                count = 2
+                for onion_addr in db.get_scannable():   # db.select_scannable():
+                    data_on = parseOnion(onion_addr[0])
+                    if(data_on[1] == 'true'):
+                        db.add_onion_scan(data_on)
+                        db.set_scanned(1, data_on[0])
+                    else:
+                        db.set_scanned(0, data_on[0])
+                    count-=1
+                    if count < 0:
+                        break
             except Exception as e:
                 print(e)
-                print("Error opening " .inputfile)
+                # print("Error opening " .inputfile)
     except MySQLdb.Error as err:  # initializer exception
         print(err)
 
@@ -146,8 +155,38 @@ def parseOnion(url):
     return data_onionscan
 
 
-main()
+def fillAddrTbl():
+    try:
+        with dbw.DataBs() as db:
+            try:
+                for addr in db.select_crawled():
+                    print(addr[0])
+                    # db.add_onion_addr(addr[0], 1, 1)
+            except MySQLdb.Error as err:
+                print(err)
+    except MySQLdb.Error as err:
+        print(err)
+
+
+def ripCollectedOnions():
+    try:
+        with dbw.DataBs() as db:
+            try:
+                for content in db.get_crawled_content():
+                    addrs = set(re.findall("([a-z2-7]{16})\.onion", content[1]))
+                    for addr in addrs:
+                        if addr != content[0]:
+                            db.add_onion_addr(addr)
+            except MySQLdb.Error as err:
+                print(err)
+    except MySQLdb.Error as err:
+        print(err)
+
+# main()
 # parsePage("fvtddif4bucpdsxx")
+# fillAddrTbl()
+# ripCollectedOnions()
+onion_scan()
 
 # The reason that http://fvtddif4bucpdsxx.onion is simple - urllib2 doesnt have
 # connection keep-alive, only close and i assume that this is the reason for
